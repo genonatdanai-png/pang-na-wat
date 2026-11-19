@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ระบบหลังบ้าน - ปังหน้าวัด</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK (Compat for direct HTML usage) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDhLoPg926qn_6G5DlyY6VhLJPKkcDc548",
+            authDomain: "pang-862d0.firebaseapp.com",
+            databaseURL: "https://pang-862d0-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "pang-862d0",
+            storageBucket: "pang-862d0.firebaseapp.com",
+            messagingSenderId: "416519193519",
+            appId: "1:416519193519:web:6053fd2420b95d735a655a",
+            measurementId: "G-57CPF0GJRH"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen pb-20 md:pb-8">
+
+    <!-- ================= หน้าจอล็อกอินรหัสผ่าน (Admin Login Gate) ================= -->
+    <div id="admin-login-screen" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-8 shadow-2xl space-y-5 text-center">
+            <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-inner">
+                🔐
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-slate-800">ระบบหลังบ้าน ปังหน้าวัด</h1>
+                <p class="text-xs text-slate-500 mt-1">กรุณากรอกรหัสผ่านสำหรับเจ้าของร้าน</p>
+            </div>
+            <form onsubmit="handleAdminLogin(event)" class="space-y-4">
+                <div>
+                    <input type="password" id="admin-password-input" placeholder="กรอกรหัสผ่าน (เริ่มต้น: 1234)" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-center text-lg font-bold tracking-widest focus:border-amber-500 outline-none" required>
+                    <p id="login-error-msg" class="hidden text-xs text-red-600 font-semibold mt-1.5">❌ รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่ครับ</p>
+                </div>
+                <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-900 font-bold py-3 rounded-xl text-base transition shadow-md">
+                    เข้าสู่ระบบหลังบ้าน
+                </button>
+            </form>
+            <div class="pt-2 border-t">
+                <a href="index.html" class="text-xs text-slate-400 hover:text-slate-600 underline">← กลับไปหน้าร้านสำหรับลูกค้า</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= เนื้อหาระบบหลังบ้าน ================= -->
+    <div id="admin-main-app" class="hidden">
+
+        <!-- Navbar เจ้าของร้าน -->
+        <nav class="bg-slate-800 text-white shadow-md p-3.5 sm:p-4 sticky top-0 z-40">
+            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
+                <div class="w-full sm:w-auto flex justify-between sm:justify-start items-center gap-2">
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-lg sm:text-xl font-bold">ปังหน้าวัด (Admin)</h1>
+                        <span id="db-sync-badge" class="text-[10px] bg-slate-700 px-2 py-0.5 rounded-full">กำลังเชื่อม...</span>
+                    </div>
+                    
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="toggleStoreStatus()" id="btn-store-status" class="text-xs bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1.5 rounded-lg font-bold transition shadow">
+                            🟢 เปิดร้าน
+                        </button>
+
+                        <button onclick="testSound()" class="text-xs bg-slate-700 hover:bg-slate-600 px-2.5 py-1.5 rounded-lg transition" title="ทดสอบเสียง">
+                            🔊 กริ่ง
+                        </button>
+
+                        <button onclick="lockAdminScreen()" class="text-xs bg-red-600/80 hover:bg-red-600 px-2.5 py-1.5 rounded-lg font-semibold transition" title="ล็อกหน้าจอ">
+                            🔒 ล็อก
+                        </button>
+                    </div>
+                </div>
+
+                <!-- เมนูสลับหน้า (แสดงบน Tablet / PC) -->
+                <div class="hidden sm:flex flex-wrap gap-1.5">
+                    <button onclick="switchTab('kitchen')" id="tab-kitchen" class="px-3 py-2 bg-amber-500 text-slate-900 font-bold rounded-xl text-xs lg:text-sm transition">ออเดอร์รายวัน</button>
+                    <button onclick="switchTab('menu')" id="tab-menu" class="px-3 py-2 bg-slate-700 text-white rounded-xl text-xs lg:text-sm transition">เมนู & หมวดหมู่</button>
+                    <button onclick="switchTab('toppings')" id="tab-toppings" class="px-3 py-2 bg-slate-700 text-white rounded-xl text-xs lg:text-sm transition">ท็อปปิ้ง</button>
+                    <button onclick="switchTab('payment')" id="tab-payment" class="px-3 py-2 bg-slate-700 text-white rounded-xl text-xs lg:text-sm transition">พร้อมเพย์ & รหัสผ่าน</button>
+                    <button onclick="switchTab('accounting')" id="tab-accounting" class="px-3 py-2 bg-slate-700 text-white rounded-xl text-xs lg:text-sm transition">บัญชีรายรับ</button>
+                    <button onclick="switchTab('bans')" id="tab-bans" class="px-3 py-2 bg-slate-700 text-white rounded-xl text-xs lg:text-sm transition">แบน IP</button>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-7xl mx-auto p-3 sm:p-4 mt-2">
+
+            <!-- 1. หน้าจัดการออเดอร์แยกตามวัน (Kitchen & Delivery) -->
+            <div id="view-kitchen" class="space-y-4">
+                <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="text-base sm:text-lg font-bold text-slate-800">ออเดอร์ประจำวันที่:</h2>
+                        <input type="date" id="order-date-filter" onchange="renderOrders()" class="px-3 py-1.5 border rounded-xl text-sm font-semibold text-amber-700 bg-amber-50 outline-none focus:ring-2 focus:ring-amber-500">
+                        <button onclick="setFilterToday()" class="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold">วันนี้</button>
+                        <button onclick="setFilterAllDates()" class="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold">ดูทั้งหมด</button>
+                    </div>
+                    <div class="flex items-center gap-2 self-end sm:self-auto">
+                        <span id="daily-order-count" class="text-xs font-bold text-slate-500">0 ออเดอร์</span>
+                        <button onclick="clearOrders()" class="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-200">ล้างประวัติ</button>
+                    </div>
+                </div>
+
+                <div id="orders-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            </div>
+
+            <!-- 2. หน้าจัดการเมนู & หมวดหมู่ -->
+            <div id="view-menu" class="hidden space-y-5">
+                <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                    <h2 class="text-base font-bold text-slate-800">📂 จัดการหมวดหมู่สินค้า</h2>
+                    <div class="flex gap-2 max-w-md">
+                        <input type="text" id="new-category-name" placeholder="ชื่อหมวดหมู่ใหม่ (เช่น ขนมปังปิ้ง, น้ำปั่น)" class="w-full px-3.5 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                        <button onclick="addCategory()" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-700 shrink-0">+ เพิ่มหมวด</button>
+                    </div>
+                    <div id="admin-category-list" class="flex flex-wrap gap-2 pt-1"></div>
+                </div>
+
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 id="form-menu-title" class="text-base sm:text-lg font-bold text-slate-800 mb-4">เพิ่มเมนูสินค้าใหม่</h2>
+                    <input type="hidden" id="edit-menu-id" value="">
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-start">
+                        <div class="sm:col-span-4 flex items-center gap-3">
+                            <div class="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 overflow-hidden shrink-0 flex items-center justify-center">
+                                <img id="preview-image" src="" alt="รูปสินค้า" class="w-full h-full object-cover hidden">
+                                <span id="preview-placeholder" class="text-xs text-slate-400 text-center px-1">ไม่มีรูป</span>
+                            </div>
+                            <div class="w-full">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">รูปภาพสินค้า (จากมือถือ/คอม)</label>
+                                <input type="file" id="new-image-file" accept="image/*" onchange="handleImageUpload(event)" class="block w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer">
+                                <button type="button" onclick="clearSelectedImage()" id="btn-clear-img" class="hidden text-xs text-red-500 mt-1 underline">ลบรูปที่เลือก</button>
+                            </div>
+                        </div>
+
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">ชื่อสินค้า / เมนู</label>
+                            <input type="text" id="new-name" placeholder="เช่น ปังปิ้งเนยนม, ชาไทยเย็น..." class="w-full px-3.5 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+                        </div>
+
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">หมวดหมู่</label>
+                            <select id="new-category" class="w-full px-3 py-2.5 border rounded-xl text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none"></select>
+                        </div>
+
+                        <div class="sm:col-span-1">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">ราคา</label>
+                            <input type="number" id="new-price" placeholder="25" class="w-full px-3.5 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+                        </div>
+
+                        <div class="sm:col-span-2 sm:pt-5 flex gap-1.5">
+                            <button onclick="saveMenuForm()" id="btn-save-menu" class="w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 text-sm transition shadow-sm">
+                                + เพิ่มเมนู
+                            </button>
+                            <button onclick="cancelEditMenu()" id="btn-cancel-edit" class="hidden bg-gray-200 text-gray-700 px-3 py-2.5 rounded-xl font-semibold hover:bg-gray-300 text-sm">
+                                ยกเลิก
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-base sm:text-lg font-bold text-slate-800">รายการสินค้าทั้งหมดในร้าน (<span id="menu-count">0</span> รายการ)</h3>
+                    </div>
+                    <div id="admin-menu-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+                </div>
+            </div>
+
+            <!-- 3. หน้าตั้งค่าท็อปปิ้ง (พิมพ์เพิ่มหมวดหมู่ท็อปปิ้งเองได้อิสระ) -->
+            <div id="view-toppings" class="hidden space-y-5">
+                <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                    <h2 class="text-base font-bold text-slate-800">🏷️ หมวดหมู่ท็อปปิ้ง (พิมพ์เพิ่มเองได้อิสระ)</h2>
+                    <p class="text-xs text-slate-500">สร้างหมวดหมู่สำหรับจัดกลุ่มท็อปปิ้ง เช่น หน้าขนมปัง, ซอสราด, ท็อปปิ้งเครื่องดื่ม, ไข่มุก & เยลลี่</p>
+                    <div class="flex gap-2 max-w-md">
+                        <input type="text" id="new-topping-group-name" placeholder="พิมพ์ชื่อหมวดท็อปปิ้งใหม่..." class="w-full px-3.5 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                        <button onclick="addToppingGroup()" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-700 shrink-0">+ เพิ่มหมวดท็อปปิ้ง</button>
+                    </div>
+                    <div id="admin-topping-group-list" class="flex flex-wrap gap-2 pt-1"></div>
+                </div>
+
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 id="form-topping-title" class="text-base sm:text-lg font-bold text-slate-800 mb-3">🧀 เพิ่มรายการท็อปปิ้ง</h2>
+                    <input type="hidden" id="edit-topping-id" value="">
+
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">ชื่อท็อปปิ้ง</label>
+                            <input type="text" id="new-topping-name" placeholder="เช่น เพิ่มชีส, วิปครีม, ไข่มุก..." class="w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                        </div>
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">หมวดท็อปปิ้ง (ที่ตั้งเอง)</label>
+                            <select id="new-topping-group" class="w-full px-3 py-2.5 border rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-amber-500"></select>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">แสดงกับสินค้าหมวด</label>
+                            <select id="new-topping-target-category" class="w-full px-3 py-2.5 border rounded-xl text-sm bg-white outline-none focus:ring-2 focus:ring-amber-500"></select>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">ราคา (+บาท)</label>
+                            <input type="number" id="new-topping-price" placeholder="เช่น 10" class="w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                        </div>
+                        <div class="sm:col-span-2 sm:pt-5 flex gap-1.5">
+                            <button onclick="saveToppingForm()" id="btn-save-topping" class="w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-emerald-700 transition shadow-sm">
+                                + เพิ่มท็อปปิ้ง
+                            </button>
+                            <button onclick="cancelEditTopping()" id="btn-cancel-topping" class="hidden bg-gray-200 text-gray-700 px-3 py-2.5 rounded-xl font-semibold hover:bg-gray-300 text-sm">
+                                ยกเลิก
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                        <h3 class="text-base font-bold text-slate-800">📋 รายการท็อปปิ้งในร้าน (<span id="topping-count">0</span> รายการ)</h3>
+                        <div id="topping-filter-tabs" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+                    <div id="admin-topping-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+                </div>
+            </div>
+
+            <!-- 4. หน้าตั้งค่าพร้อมเพย์ & รหัสผ่านแอดมิน -->
+            <div id="view-payment" class="hidden grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-slate-800">💳 ตั้งค่าบัญชีพร้อมเพย์</h2>
+                        <p class="text-xs text-slate-500 mt-1">ระบบจะนำหมายเลขนี้ไปสร้าง QR Code พร้อมยอดเงินให้อัตโนมัติเมื่อลูกค้าเลือกขับรถไปส่ง</p>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">เบอร์โทรศัพท์พร้อมเพย์ (10 หลัก) หรือ เลขบัตรประชาชน (13 หลัก)</label>
+                            <input type="text" id="setting-promptpay-id" placeholder="เช่น 0855750995" class="w-full px-3.5 py-2.5 border rounded-xl text-sm font-mono font-bold outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">ชื่อบัญชี / ชื่อร้านที่แสดงให้ลูกค้าเห็น</label>
+                            <input type="text" id="setting-account-name" placeholder="เช่น ร้านปังหน้าวัด" class="w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <button onclick="savePaymentSettings()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 transition shadow-sm">
+                            บันทึกข้อมูลพร้อมเพย์
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-slate-800">🔐 เปลี่ยนรหัสผ่านเข้าหน้าหลังบ้าน</h2>
+                        <p class="text-xs text-slate-500 mt-1">ตั้งรหัสผ่านใหม่เพื่อป้องกันบุคคลอื่นแอบเปิดดูยอดขายหรือแก้ไขเมนู</p>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">รหัสผ่านเดิม</label>
+                            <input type="password" id="old-admin-pass" placeholder="กรอกรหัสผ่านปัจจุบัน" class="w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">รหัสผ่านใหม่</label>
+                            <input type="password" id="new-admin-pass" placeholder="ตั้งรหัสผ่านใหม่อย่างน้อย 4 ตัว" class="w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">ยืนยันรหัสผ่านใหม่อีกครั้ง</label>
+                            <input type="password" id="confirm-admin-pass" placeholder="พิมพ์รหัสผ่านใหม่อีกครั้ง" class="w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                        </div>
+                        <button onclick="changeAdminPassword()" class="bg-slate-800 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-700 transition shadow-sm">
+                            เปลี่ยนรหัสผ่านใหม่
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. หน้าบัญชีสรุปรายได้ (Accounting) -->
+            <div id="view-accounting" class="hidden space-y-5">
+                <h2 class="text-lg sm:text-xl font-bold text-slate-800">สรุปรายได้ร้านปังหน้าวัด (นับเฉพาะบิลที่เสร็จแล้ว)</h2>
+                
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border-l-4 border-emerald-500">
+                        <p class="text-gray-500 text-xs">รายได้วันนี้</p>
+                        <h3 id="rev-today" class="text-xl sm:text-2xl font-bold text-emerald-600 mt-1">0 บ.</h3>
+                    </div>
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border-l-4 border-blue-500">
+                        <p class="text-gray-500 text-xs">รายได้เดือนนี้</p>
+                        <h3 id="rev-month" class="text-xl sm:text-2xl font-bold text-blue-600 mt-1">0 บ.</h3>
+                    </div>
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border-l-4 border-purple-500">
+                        <p class="text-gray-500 text-xs">รายได้ปีนี้</p>
+                        <h3 id="rev-year" class="text-xl sm:text-2xl font-bold text-purple-600 mt-1">0 บ.</h3>
+                    </div>
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border-l-4 border-amber-500">
+                        <p class="text-gray-500 text-xs">บิลที่สำเร็จทั้งหมด</p>
+                        <h3 id="rev-count" class="text-xl sm:text-2xl font-bold text-amber-600 mt-1">0 บิล</h3>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm overflow-x-auto">
+                    <h3 class="text-base font-bold text-slate-800 mb-3">ประวัติบิลทั้งหมด</h3>
+                    <table class="w-full text-left text-xs sm:text-sm min-w-[650px]">
+                        <thead>
+                            <tr class="border-b bg-slate-50 text-slate-600">
+                                <th class="p-3">รหัสบิล</th>
+                                <th class="p-3">วัน-เวลา</th>
+                                <th class="p-3">ลูกค้า</th>
+                                <th class="p-3">รายการ, ท็อปปิ้ง & หมายเหตุ</th>
+                                <th class="p-3">การชำระ</th>
+                                <th class="p-3">สถานะ</th>
+                                <th class="p-3 text-right">ยอดเงิน</th>
+                            </tr>
+                        </thead>
+                        <tbody id="acc-table" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 6. หน้าจัดการแบน IP (Ban Management) -->
+            <div id="view-bans" class="hidden space-y-5">
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-base sm:text-lg font-bold text-slate-800 mb-3">🚫 เพิ่มหมายเลข IP ที่ต้องการแบน (กรณีลูกค้าสั่งเล่น)</h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <div class="sm:col-span-4">
+                            <input type="text" id="manual-ban-ip" placeholder="ระบุ IP เช่น 192.168.1.50" class="w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500">
+                        </div>
+                        <div class="sm:col-span-6">
+                            <input type="text" id="manual-ban-reason" placeholder="สาเหตุ (เช่น สั่งแล้วไม่มารับ, แกล้งกดสั่ง)" class="w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <button onclick="manualBanIP()" class="w-full bg-red-600 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-red-700 transition">แบน IP นี้</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h3 class="text-base font-bold text-slate-800 mb-3">📋 รายชื่อ IP ที่ถูกแบนทั้งหมด (<span id="ban-count">0</span> รายการ)</h3>
+                    <div id="banned-list" class="divide-y"></div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Bottom Navigation สำหรับใช้งานบนมือถือ (Mobile) -->
+        <div class="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-800 text-white border-t border-slate-700 grid grid-cols-6 z-40">
+            <button onclick="switchTab('kitchen')" id="mob-tab-kitchen" class="py-3 text-[10px] font-bold text-amber-400 border-t-2 border-amber-400">
+                ออเดอร์
+            </button>
+            <button onclick="switchTab('menu')" id="mob-tab-menu" class="py-3 text-[10px] font-medium text-slate-300">
+                เมนู
+            </button>
+            <button onclick="switchTab('toppings')" id="mob-tab-toppings" class="py-3 text-[10px] font-medium text-slate-300">
+                ท็อปปิ้ง
+            </button>
+            <button onclick="switchTab('payment')" id="mob-tab-payment" class="py-3 text-[10px] font-medium text-slate-300">
+                ตั้งค่า
+            </button>
+            <button onclick="switchTab('accounting')" id="mob-tab-accounting" class="py-3 text-[10px] font-medium text-slate-300">
+                บัญชี
+            </button>
+            <button onclick="switchTab('bans')" id="mob-tab-bans" class="py-3 text-[10px] font-medium text-slate-300">
+                แบน IP
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Modal ดูรูปสลิปขนาดใหญ่ -->
+    <div id="slip-modal" onclick="closeSlipModal()" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div onclick="event.stopPropagation()" class="bg-white rounded-2xl max-w-md w-full p-4 space-y-3 shadow-2xl">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 id="modal-slip-title" class="font-bold text-slate-800 text-sm">หลักฐานการโอนเงิน</h3>
+                <button onclick="closeSlipModal()" class="text-gray-400 hover:text-gray-700 text-xl font-bold px-2">&times;</button>
+            </div>
+            <div class="bg-slate-100 rounded-xl p-2 flex justify-center">
+                <img id="modal-slip-img" src="" alt="สลิปโอนเงิน" class="max-h-[70vh] object-contain rounded-lg">
+            </div>
+            <button onclick="closeSlipModal()" class="w-full bg-slate-800 text-white py-2.5 rounded-xl text-sm font-bold">ปิดหน้าต่าง</button>
+        </div>
+    </div>
+
+    <script>
+        const placeholderImg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23fef3c7'/%3E%3Crect x='45' y='55' width='110' height='95' rx='20' fill='%23d97706'/%3E%3Crect x='55' y='65' width='90' height='75' rx='14' fill='%23fcd34d'/%3E%3C/svg%3E";
+
+        const defaultCategories = ['ขนมปังปิ้ง', 'เครื่องดื่ม', 'ของทานเล่น'];
+        const defaultToppingGroups = ['หน้าขนมปัง', 'ท็อปปิ้งน้ำ', 'ท็อปปิ้งพิเศษ'];
+        const defaultMenus = [
+            { id: 1, name: 'ปังปิ้ง เนยนมน้ำตาล', price: 25, category: 'ขนมปังปิ้ง', image: placeholderImg, available: true },
+            { id: 2, name: 'ปังปิ้ง สังขยาใบเตย', price: 30, category: 'ขนมปังปิ้ง', image: placeholderImg, available: true },
+            { id: 3, name: 'ปังปิ้ง ช็อกโกแลตอัลมอนด์', price: 35, category: 'ขนมปังปิ้ง', image: placeholderImg, available: true },
+            { id: 4, name: 'ชาไทยเย็น', price: 35, category: 'เครื่องดื่ม', image: placeholderImg, available: true },
+            { id: 5, name: 'นมสดฮอกไกโดเย็น', price: 35, category: 'เครื่องดื่ม', image: placeholderImg, available: true },
+            { id: 6, name: 'โกโก้ปั่นเข้มข้น', price: 45, category: 'เครื่องดื่ม', image: placeholderImg, available: true }
+        ];
+        const defaultToppings = [
+            { id: 101, name: 'เพิ่มชีส', price: 10, toppingGroup: 'หน้าขนมปัง', targetCategory: 'ขนมปังปิ้ง', available: true },
+            { id: 102, name: 'เพิ่มฝอยทอง', price: 10, toppingGroup: 'หน้าขนมปัง', targetCategory: 'ขนมปังปิ้ง', available: true },
+            { id: 103, name: 'เพิ่มกล้วยหอม', price: 10, toppingGroup: 'หน้าขนมปัง', targetCategory: 'ขนมปังปิ้ง', available: true },
+            { id: 104, name: 'เพิ่มไข่มุก', price: 5, toppingGroup: 'ท็อปปิ้งน้ำ', targetCategory: 'เครื่องดื่ม', available: true },
+            { id: 105, name: 'เพิ่มวิปครีม', price: 10, toppingGroup: 'ท็อปปิ้งพิเศษ', targetCategory: 'ALL', available: true }
+        ];
+        const defaultPaymentConfig = {
+            promptpayId: '0855750995',
+            accountName: 'ร้านปังหน้าวัด'
+        };
+
+        let categories = defaultCategories;
+        let toppingGroups = defaultToppingGroups;
+        let menus = [];
+        let toppings = defaultToppings;
+        let paymentConfig = defaultPaymentConfig;
+        let orders = [];
+        let isStoreOpen = true;
+        let bannedIPs = [];
+        let adminPassword = '1234';
+        
+        let currentUploadedImage = "";
+        let selectedToppingFilter = 'ALL_VIEW';
+        let isInitialOrdersLoaded = false;
+        let knownOrderIds = new Set();
+
+        function toArray(val) {
+            if (!val) return [];
+            return Array.isArray(val) ? val.filter(Boolean) : Object.values(val);
+        }
+
+        // --- เชื่อมต่อ Firebase Realtime Database แบบเรียลไทม์ ---
+        function initFirebaseListeners() {
+            db.ref('.info/connected').on('value', (snap) => {
+                const badge = document.getElementById('db-sync-badge');
+                if (snap.val() === true) {
+                    badge.innerText = '🌐 ออนไลน์';
+                    badge.className = 'text-[10px] bg-emerald-700 text-white px-2 py-0.5 rounded-full font-semibold';
+                } else {
+                    badge.innerText = 'กำลังเชื่อม...';
+                }
+            });
+
+            // 1. รหัสผ่านแอดมิน
+            db.ref('adminPassword').on('value', (snap) => {
+                if (snap.exists()) {
+                    adminPassword = String(snap.val());
+                } else {
+                    adminPassword = '1234';
+                    db.ref('adminPassword').set('1234');
+                }
+            });
+
+            // 2. สถานะเปิด/ปิดร้าน
+            db.ref('isStoreOpen').on('value', (snap) => {
+                if (snap.exists()) {
+                    isStoreOpen = snap.val();
+                } else {
+                    isStoreOpen = true;
+                    db.ref('isStoreOpen').set(true);
+                }
+                renderStoreStatusBtn();
+            });
+
+            // 3. หมวดหมู่สินค้า
+            db.ref('categories').on('value', (snap) => {
+                if (snap.exists()) {
+                    categories = toArray(snap.val());
+                } else {
+                    categories = defaultCategories;
+                    db.ref('categories').set(defaultCategories);
+                }
+                renderCategoriesAdmin();
+                renderAdminToppings();
+            });
+
+            // 4. หมวดหมู่ท็อปปิ้ง
+            db.ref('toppingGroups').on('value', (snap) => {
+                if (snap.exists()) {
+                    toppingGroups = toArray(snap.val());
+                } else {
+                    toppingGroups = defaultToppingGroups;
+                    db.ref('toppingGroups').set(defaultToppingGroups);
+                }
+                renderToppingGroupsAdmin();
+                renderAdminToppings();
+            });
+
+            // 5. รายการเมนู
+            db.ref('menus').on('value', (snap) => {
+                if (snap.exists()) {
+                    menus = toArray(snap.val());
+                } else {
+                    menus = defaultMenus;
+                    db.ref('menus').set(defaultMenus);
+                }
+                renderAdminMenu();
+            });
+
+            // 6. รายการท็อปปิ้ง
+            db.ref('toppings').on('value', (snap) => {
+                if (snap.exists()) {
+                    toppings = toArray(snap.val());
+                } else {
+                    toppings = defaultToppings;
+                    db.ref('toppings').set(defaultToppings);
+                }
+                renderAdminToppings();
+            });
+
+            // 7. ตั้งค่าพร้อมเพย์
+            db.ref('paymentConfig').on('value', (snap) => {
+                if (snap.exists()) {
+                    paymentConfig = snap.val();
+                } else {
+                    paymentConfig = defaultPaymentConfig;
+                    db.ref('paymentConfig').set(defaultPaymentConfig);
+                }
+                document.getElementById('setting-promptpay-id').value = paymentConfig.promptpayId || '';
+                document.getElementById('setting-account-name').value = paymentConfig.accountName || '';
+            });
+
+            // 8. รายการแบน IP
+            db.ref('bannedIPs').on('value', (snap) => {
+                bannedIPs = toArray(snap.val());
+                renderBanList();
+                renderOrders();
+            });
+
+            // 9. ออเดอร์ทั้งหมด (Real-time + เสียงแจ้งเตือนเมื่อมีออเดอร์ใหม่)
+            db.ref('orders').on('value', (snap) => {
+                const rawOrders = toArray(snap.val());
+                // เรียงออเดอร์ใหม่ล่าสุดไว้บนสุด
+                rawOrders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                
+                if (!isInitialOrdersLoaded) {
+                    rawOrders.forEach(o => knownOrderIds.add(o.id));
+                    isInitialOrdersLoaded = true;
+                } else {
+                    let hasNewOrder = false;
+                    rawOrders.forEach(o => {
+                        if (!knownOrderIds.has(o.id)) {
+                            knownOrderIds.add(o.id);
+                            hasNewOrder = true;
+                        }
+                    });
+                    if (hasNewOrder) {
+                        playDingSound();
+                        setFilterToday();
+                    }
+                }
+
+                orders = rawOrders;
+                renderOrders();
+                renderAccounting();
+            });
+        }
+
+        // --- ระบบตรวจสอบรหัสผ่านแอดมิน ---
+        function checkLoginSession() {
+            const isLoggedIn = sessionStorage.getItem('pangnawat_admin_auth') === 'true';
+            if (isLoggedIn) {
+                document.getElementById('admin-login-screen').classList.add('hidden');
+                document.getElementById('admin-main-app').classList.remove('hidden');
+            } else {
+                document.getElementById('admin-login-screen').classList.remove('hidden');
+                document.getElementById('admin-main-app').classList.add('hidden');
+                document.getElementById('admin-password-input').focus();
+            }
+        }
+
+        function handleAdminLogin(event) {
+            event.preventDefault();
+            const inputPass = document.getElementById('admin-password-input').value;
+            const errorMsg = document.getElementById('login-error-msg');
+
+            if (inputPass === adminPassword) {
+                sessionStorage.setItem('pangnawat_admin_auth', 'true');
+                errorMsg.classList.add('hidden');
+                document.getElementById('admin-password-input').value = '';
+                checkLoginSession();
+            } else {
+                errorMsg.classList.remove('hidden');
+                document.getElementById('admin-password-input').value = '';
+                document.getElementById('admin-password-input').focus();
+            }
+        }
+
+        function lockAdminScreen() {
+            sessionStorage.removeItem('pangnawat_admin_auth');
+            checkLoginSession();
+        }
+
+        function changeAdminPassword() {
+            const oldPass = document.getElementById('old-admin-pass').value;
+            const newPass = document.getElementById('new-admin-pass').value.trim();
+            const confirmPass = document.getElementById('confirm-admin-pass').value.trim();
+
+            if (oldPass !== adminPassword) {
+                return alert('รหัสผ่านเดิมไม่ถูกต้องครับ');
+            }
+            if (newPass.length < 4) {
+                return alert('กรุณาตั้งรหัสผ่านใหม่อย่างน้อย 4 ตัวอักษรครับ');
+            }
+            if (newPass !== confirmPass) {
+                return alert('รหัสผ่านใหม่ทั้ง 2 ช่องไม่ตรงกันครับ');
+            }
+
+            db.ref('adminPassword').set(newPass);
+            document.getElementById('old-admin-pass').value = '';
+            document.getElementById('new-admin-pass').value = '';
+            document.getElementById('confirm-admin-pass').value = '';
+            alert('เปลี่ยนรหัสผ่านแอดมินเรียบร้อยแล้วครับ!');
+        }
+
+        function getTodayString() {
+            const now = new Date();
+            return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        }
+
+        window.onload = () => {
+            checkLoginSession();
+            document.getElementById('order-date-filter').value = getTodayString();
+            initFirebaseListeners();
+        };
+
+        function openSlipModal(orderId) {
+            const order = orders.find(o => o.id === orderId);
+            if (!order || !order.slipImage) return;
+            document.getElementById('modal-slip-title').innerText = `สลิปออเดอร์ ${order.id} (${order.customerName} - ยอด ${order.total} บ.)`;
+            document.getElementById('modal-slip-img').src = order.slipImage;
+            document.getElementById('slip-modal').classList.remove('hidden');
+        }
+
+        function closeSlipModal() {
+            document.getElementById('slip-modal').classList.add('hidden');
+        }
+
+        function savePaymentSettings() {
+            const ppId = document.getElementById('setting-promptpay-id').value.trim().replace(/[^0-9]/g, '');
+            const accName = document.getElementById('setting-account-name').value.trim();
+
+            if (ppId.length !== 10 && ppId.length !== 13 && ppId.length !== 15) {
+                return alert('กรุณากรอกเบอร์พร้อมเพย์ 10 หลัก หรือเลขบัตรประชาชน 13 หลักให้ถูกต้องครับ');
+            }
+            if (!accName) return alert('กรุณากรอกชื่อบัญชีหรือชื่อร้านครับ');
+
+            paymentConfig = { promptpayId: ppId, accountName: accName };
+            db.ref('paymentConfig').set(paymentConfig);
+            alert('บันทึกข้อมูลพร้อมเพย์เรียบร้อยแล้วครับ!');
+        }
+
+        function setFilterToday() {
+            document.getElementById('order-date-filter').value = getTodayString();
+            renderOrders();
+        }
+
+        function setFilterAllDates() {
+            document.getElementById('order-date-filter').value = '';
+            renderOrders();
+        }
+
+        function toggleStoreStatus() {
+            const nextState = !isStoreOpen;
+            db.ref('isStoreOpen').set(nextState);
+        }
+
+        function renderStoreStatusBtn() {
+            const btn = document.getElementById('btn-store-status');
+            if (isStoreOpen) {
+                btn.innerText = '🟢 เปิดร้าน';
+                btn.className = 'text-xs bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1.5 rounded-lg font-bold transition shadow';
+            } else {
+                btn.innerText = '🔴 ปิดร้าน';
+                btn.className = 'text-xs bg-red-600 hover:bg-red-500 px-2.5 py-1.5 rounded-lg font-bold transition shadow';
+            }
+        }
+
+        function switchTab(tab) {
+            ['kitchen', 'menu', 'toppings', 'payment', 'accounting', 'bans'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+                
+                const btn = document.getElementById(`tab-${t}`);
+                if (btn) btn.className = "px-3 py-2 bg-slate-700 text-white rounded-xl text-xs lg:text-sm transition";
+                
+                const mobBtn = document.getElementById(`mob-tab-${t}`);
+                if (mobBtn) mobBtn.className = "py-3 text-[10px] font-medium text-slate-300";
+            });
+
+            document.getElementById(`view-${tab}`).classList.remove('hidden');
+            
+            const activeBtn = document.getElementById(`tab-${tab}`);
+            if (activeBtn) activeBtn.className = "px-3 py-2 bg-amber-500 text-slate-900 font-bold rounded-xl text-xs lg:text-sm transition";
+            
+            const activeMobBtn = document.getElementById(`mob-tab-${tab}`);
+            if (activeMobBtn) activeMobBtn.className = "py-3 text-[10px] font-bold text-amber-400 border-t-2 border-amber-400";
+
+            if (tab === 'toppings') {
+                renderToppingGroupsAdmin();
+                renderAdminToppings();
+            }
+            if (tab === 'accounting') renderAccounting();
+            if (tab === 'bans') renderBanList();
+        }
+
+        function playDingSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const now = ctx.currentTime;
+                
+                const osc1 = ctx.createOscillator();
+                const gain1 = ctx.createGain();
+                osc1.frequency.setValueAtTime(987.77, now);
+                gain1.gain.setValueAtTime(0.2, now);
+                gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc1.connect(gain1);
+                gain1.connect(ctx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.3);
+
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                osc2.frequency.setValueAtTime(783.99, now + 0.25);
+                gain2.gain.setValueAtTime(0.2, now + 0.25);
+                gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                osc2.start(now + 0.25);
+                osc2.stop(now + 0.7);
+            } catch (e) {
+                console.log('Audio blocked:', e);
+            }
+        }
+
+        function testSound() {
+            playDingSound();
+        }
+
+        // --- ระบบจัดการหมวดหมู่สินค้า ---
+        function addCategory() {
+            const name = document.getElementById('new-category-name').value.trim();
+            if (!name) return alert('กรุณาพิมพ์ชื่อหมวดหมู่ครับ');
+            if (categories.includes(name)) return alert('มีหมวดหมู่นี้อยู่แล้วครับ');
+
+            const updated = [...categories, name];
+            document.getElementById('new-category-name').value = '';
+            db.ref('categories').set(updated);
+        }
+
+        function deleteCategory(catName) {
+            if (categories.length <= 1) return alert('ต้องเหลือหมวดหมู่อย่างน้อย 1 หมวดหมู่ครับ');
+            if (confirm(`ยืนยันการลบหมวดหมู่ "${catName}"?`)) {
+                const updated = categories.filter(c => c !== catName);
+                db.ref('categories').set(updated);
+            }
+        }
+
+        function renderCategoriesAdmin() {
+            const list = document.getElementById('admin-category-list');
+            const menuSelect = document.getElementById('new-category');
+            const targetCatSelect = document.getElementById('new-topping-target-category');
+
+            list.innerHTML = categories.map(c => `
+                <span class="inline-flex items-center gap-1.5 bg-amber-100 text-amber-900 px-3 py-1 rounded-full text-xs font-bold">
+                    ${c}
+                    <button onclick="deleteCategory('${c.replace(/'/g, "'")}')" class="text-red-600 hover:text-red-800 ml-1 font-extrabold">×</button>
+                </span>
+            `).join('');
+
+            menuSelect.innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+            
+            if (targetCatSelect) {
+                targetCatSelect.innerHTML = `
+                    <option value="ALL">🌟 ใช้ได้ทุกหมวดสินค้า</option>
+                    ${categories.map(c => `<option value="${c}">เฉพาะ: ${c}</option>`).join('')}
+                `;
+            }
+        }
+
+        // --- ระบบจัดการหมวดหมู่ท็อปปิ้ง ---
+        function addToppingGroup() {
+            const name = document.getElementById('new-topping-group-name').value.trim();
+            if (!name) return alert('กรุณาพิมพ์ชื่อหมวดท็อปปิ้งครับ');
+            if (toppingGroups.includes(name)) return alert('มีหมวดท็อปปิ้งนี้อยู่แล้วครับ');
+
+            const updated = [...toppingGroups, name];
+            document.getElementById('new-topping-group-name').value = '';
+            db.ref('toppingGroups').set(updated);
+        }
+
+        function deleteToppingGroup(groupName) {
+            if (toppingGroups.length <= 1) return alert('ต้องเหลือหมวดท็อปปิ้งอย่างน้อย 1 หมวดครับ');
+            if (confirm(`ยืนยันการลบหมวดท็อปปิ้ง "${groupName}"?`)) {
+                const updated = toppingGroups.filter(g => g !== groupName);
+                db.ref('toppingGroups').set(updated);
+            }
+        }
+
+        function renderToppingGroupsAdmin() {
+            const list = document.getElementById('admin-topping-group-list');
+            const groupSelect = document.getElementById('new-topping-group');
+
+            if (list) {
+                list.innerHTML = toppingGroups.map(g => `
+                    <span class="inline-flex items-center gap-1.5 bg-indigo-100 text-indigo-900 px-3 py-1 rounded-full text-xs font-bold">
+                        ${g}
+                        <button onclick="deleteToppingGroup('${g.replace(/'/g, "'")}')" class="text-red-600 hover:text-red-800 ml-1 font-extrabold">×</button>
+                    </span>
+                `).join('');
+            }
+
+            if (groupSelect) {
+                groupSelect.innerHTML = toppingGroups.map(g => `<option value="${g}">${g}</option>`).join('');
+            }
+        }
+
+        // --- ระบบจัดการรายการท็อปปิ้ง ---
+        function saveToppingForm() {
+            const editId = document.getElementById('edit-topping-id').value;
+            const name = document.getElementById('new-topping-name').value.trim();
+            const toppingGroup = document.getElementById('new-topping-group').value;
+            const targetCategory = document.getElementById('new-topping-target-category').value;
+            const price = parseFloat(document.getElementById('new-topping-price').value);
+
+            if (!name) return alert('กรุณาพิมพ์ชื่อท็อปปิ้งครับ');
+            if (isNaN(price) || price < 0) return alert('กรุณากรอกราคาบวกเพิ่มให้ถูกต้องครับ');
+
+            let updatedToppings = [...toppings];
+            if (editId) {
+                const idx = updatedToppings.findIndex(t => t.id == editId);
+                if (idx !== -1) {
+                    updatedToppings[idx].name = name;
+                    updatedToppings[idx].toppingGroup = toppingGroup;
+                    updatedToppings[idx].targetCategory = targetCategory;
+                    updatedToppings[idx].price = price;
+                }
+                cancelEditTopping();
+            } else {
+                updatedToppings.push({
+                    id: Date.now(),
+                    name: name,
+                    toppingGroup: toppingGroup,
+                    targetCategory: targetCategory,
+                    price: price,
+                    available: true
+                });
+                document.getElementById('new-topping-name').value = '';
+                document.getElementById('new-topping-price').value = '';
+            }
+
+            db.ref('toppings').set(updatedToppings);
+        }
+
+        function editTopping(id) {
+            const t = toppings.find(item => item.id === id);
+            if (!t) return;
+
+            document.getElementById('edit-topping-id').value = t.id;
+            document.getElementById('new-topping-name').value = t.name;
+            document.getElementById('new-topping-price').value = t.price;
+            
+            const groupSelect = document.getElementById('new-topping-group');
+            if (t.toppingGroup && toppingGroups.includes(t.toppingGroup)) {
+                groupSelect.value = t.toppingGroup;
+            }
+
+            const catSelect = document.getElementById('new-topping-target-category');
+            const targetCat = t.targetCategory || t.category || 'ALL';
+            if (targetCat === 'ALL' || categories.includes(targetCat)) {
+                catSelect.value = targetCat;
+            } else {
+                catSelect.value = 'ALL';
+            }
+
+            document.getElementById('form-topping-title').innerText = '✏️ แก้ไขรายการท็อปปิ้ง';
+            const btnSave = document.getElementById('btn-save-topping');
+            btnSave.innerText = 'บันทึก';
+            btnSave.className = 'w-full bg-amber-500 text-slate-900 py-2.5 rounded-xl font-bold text-sm hover:bg-amber-600 transition shadow-sm';
+            document.getElementById('btn-cancel-topping').classList.remove('hidden');
+        }
+
+        function cancelEditTopping() {
+            document.getElementById('edit-topping-id').value = '';
+            document.getElementById('new-topping-name').value = '';
+            document.getElementById('new-topping-price').value = '';
+            document.getElementById('new-topping-target-category').value = 'ALL';
+
+            document.getElementById('form-topping-title').innerText = '🧀 เพิ่มรายการท็อปปิ้ง';
+            const btnSave = document.getElementById('btn-save-topping');
+            btnSave.innerText = '+ เพิ่มท็อปปิ้ง';
+            btnSave.className = 'w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-emerald-700 transition shadow-sm';
+            document.getElementById('btn-cancel-topping').classList.add('hidden');
+        }
+
+        function toggleTopping(id) {
+            const updated = toppings.map(t => t.id === id ? { ...t, available: !t.available } : t);
+            db.ref('toppings').set(updated);
+        }
+
+        function deleteTopping(id) {
+            if (confirm('ยืนยันการลบท็อปปิ้งนี้?')) {
+                const updated = toppings.filter(item => item.id !== id);
+                if (document.getElementById('edit-topping-id').value == id) cancelEditTopping();
+                db.ref('toppings').set(updated);
+            }
+        }
+
+        function filterAdminToppings(groupFilter) {
+            selectedToppingFilter = groupFilter;
+            renderAdminToppings();
+        }
+
+        function renderAdminToppings() {
+            const list = document.getElementById('admin-topping-list');
+            const filterContainer = document.getElementById('topping-filter-tabs');
+            document.getElementById('topping-count').innerText = toppings.length;
+
+            const filterOptions = [
+                { key: 'ALL_VIEW', label: 'ดูทั้งหมด' },
+                ...toppingGroups.map(g => ({ key: g, label: g }))
+            ];
+
+            filterContainer.innerHTML = filterOptions.map(opt => {
+                const active = selectedToppingFilter === opt.key;
+                return `<button onclick="filterAdminToppings('${opt.key.replace(/'/g, "'")}')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${active ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${opt.label}</button>`;
+            }).join('');
+
+            let displayToppings = toppings;
+            if (selectedToppingFilter !== 'ALL_VIEW') {
+                displayToppings = toppings.filter(t => (t.toppingGroup || 'ทั่วไป') === selectedToppingFilter);
+            }
+
+            if (displayToppings.length === 0) {
+                list.innerHTML = `<p class="text-gray-400 col-span-3 text-center py-6 text-sm">ไม่มีรายการท็อปปิ้งในหมวดนี้</p>`;
+                return;
+            }
+
+            list.innerHTML = displayToppings.map(t => {
+                const groupLabel = t.toppingGroup || 'ทั่วไป';
+                const targetCat = t.targetCategory || t.category || 'ALL';
+                const targetLabel = targetCat === 'ALL' ? '🌟 ทุกหมวดสินค้า' : `เฉพาะ: ${targetCat}`;
+
+                return `
+                <div class="p-3.5 border rounded-xl flex justify-between items-center bg-slate-50 hover:bg-white transition gap-2">
+                    <div class="truncate">
+                        <div class="flex flex-wrap gap-1">
+                            <span class="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">${groupLabel}</span>
+                            <span class="text-[10px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full font-semibold">${targetLabel}</span>
+                        </div>
+                        <p class="font-bold text-slate-800 text-sm mt-1 truncate">${t.name}</p>
+                        <p class="text-xs text-amber-700 font-semibold">+${t.price} บาท • ${t.available ? '<span class="text-emerald-600">พร้อมขาย</span>' : '<span class="text-red-500">หมด</span>'}</p>
+                    </div>
+                    <div class="flex gap-1 shrink-0">
+                        <button onclick="editTopping(${t.id})" class="px-2 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold hover:bg-blue-200">แก้</button>
+                        <button onclick="toggleTopping(${t.id})" class="px-2 py-1.5 rounded-lg text-xs font-semibold ${t.available ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                            ${t.available ? 'หมด' : 'เปิด'}
+                        </button>
+                        <button onclick="deleteTopping(${t.id})" class="px-2 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-semibold">ลบ</button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        // --- ระบบแบน IP ---
+        function banCustomerIP(ip, customerName) {
+            if (!ip || ip === 'กำลังตรวจสอบ...') return alert('ไม่พบข้อมูล IP ของออเดอร์นี้ครับ');
+            if (bannedIPs.some(b => b.ip === ip)) return alert(`IP: ${ip} ถูกแบนอยู่ในระบบแล้วครับ`);
+
+            const reason = prompt(`ยืนยันการแบน IP: ${ip} (${customerName})
+ระบุสาเหตุการแบน:`, 'สั่งเล่นแล้วไม่เอา');
+            if (reason === null) return;
+
+            const updated = [{
+                ip: ip,
+                customerName: customerName || '-',
+                reason: reason.trim() || 'สั่งเล่น',
+                bannedAt: new Date().toLocaleString('th-TH')
+            }, ...bannedIPs];
+
+            db.ref('bannedIPs').set(updated);
+            alert(`แบน IP: ${ip} เรียบร้อยแล้ว ลูกค้ารายนี้จะไม่สามารถสั่งซื้อได้อีกครับ`);
+        }
+
+        function manualBanIP() {
+            const ip = document.getElementById('manual-ban-ip').value.trim();
+            const reason = document.getElementById('manual-ban-reason').value.trim();
+
+            if (!ip) return alert('กรุณากรอกหมายเลข IP ที่ต้องการแบนครับ');
+            if (bannedIPs.some(b => b.ip === ip)) return alert('IP นี้ถูกแบนอยู่แล้วครับ');
+
+            const updated = [{
+                ip: ip,
+                customerName: 'เพิ่มโดยแอดมิน',
+                reason: reason || 'แบนโดยเจ้าของร้าน',
+                bannedAt: new Date().toLocaleString('th-TH')
+            }, ...bannedIPs];
+
+            document.getElementById('manual-ban-ip').value = '';
+            document.getElementById('manual-ban-reason').value = '';
+            db.ref('bannedIPs').set(updated);
+        }
+
+        function unbanIP(ip) {
+            if (confirm(`ต้องการปลดแบน IP: ${ip} ใช่หรือไม่?`)) {
+                const updated = bannedIPs.filter(b => b.ip !== ip);
+                db.ref('bannedIPs').set(updated);
+            }
+        }
+
+        function renderBanList() {
+            const list = document.getElementById('banned-list');
+            document.getElementById('ban-count').innerText = bannedIPs.length;
+
+            if (bannedIPs.length === 0) {
+                list.innerHTML = `<p class="text-gray-400 text-center py-6 text-sm">ยังไม่มีรายการ IP ที่ถูกแบน</p>`;
+                return;
+            }
+
+            list.innerHTML = bannedIPs.map(b => `
+                <div class="py-3 flex justify-between items-center gap-3">
+                    <div>
+                        <p class="font-mono font-bold text-red-600 text-sm">${b.ip} <span class="font-sans text-xs font-normal text-gray-500">(${b.customerName})</span></p>
+                        <p class="text-xs text-gray-600">สาเหตุ: ${b.reason} • <span class="text-gray-400">${b.bannedAt}</span></p>
+                    </div>
+                    <button onclick="unbanIP('${b.ip}')" class="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-200 shrink-0">
+                        ปลดแบน
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        // --- จัดการรูปภาพและเมนู ---
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 400;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_SIZE) {
+                            height *= MAX_SIZE / width;
+                            width = MAX_SIZE;
+                        }
+                    } else {
+                        if (height > MAX_SIZE) {
+                            width *= MAX_SIZE / height;
+                            height = MAX_SIZE;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    currentUploadedImage = canvas.toDataURL('image/jpeg', 0.75);
+                    showPreviewImage(currentUploadedImage);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function showPreviewImage(base64Str) {
+            const imgEl = document.getElementById('preview-image');
+            const placeholderEl = document.getElementById('preview-placeholder');
+            const clearBtn = document.getElementById('btn-clear-img');
+
+            if (base64Str) {
+                imgEl.src = base64Str;
+                imgEl.classList.remove('hidden');
+                placeholderEl.classList.add('hidden');
+                clearBtn.classList.remove('hidden');
+            } else {
+                imgEl.src = "";
+                imgEl.classList.add('hidden');
+                placeholderEl.classList.remove('hidden');
+                clearBtn.classList.add('hidden');
+            }
+        }
+
+        function clearSelectedImage() {
+            currentUploadedImage = "";
+            document.getElementById('new-image-file').value = "";
+            showPreviewImage("");
+        }
+
+        function saveMenuForm() {
+            const editId = document.getElementById('edit-menu-id').value;
+            const name = document.getElementById('new-name').value.trim();
+            const category = document.getElementById('new-category').value;
+            const price = parseFloat(document.getElementById('new-price').value);
+
+            if (!name) return alert('กรุณาพิมพ์ชื่อสินค้าครับ');
+            if (isNaN(price) || price < 0) return alert('กรุณากรอกราคาให้ถูกต้องครับ');
+
+            let updatedMenus = [...menus];
+            if (editId) {
+                const index = updatedMenus.findIndex(m => m.id == editId);
+                if (index !== -1) {
+                    updatedMenus[index].name = name;
+                    updatedMenus[index].category = category;
+                    updatedMenus[index].price = price;
+                    updatedMenus[index].image = currentUploadedImage || placeholderImg;
+                }
+                cancelEditMenu();
+            } else {
+                updatedMenus.push({ 
+                    id: Date.now(), 
+                    name, 
+                    category,
+                    price, 
+                    image: currentUploadedImage || placeholderImg, 
+                    available: true 
+                });
+                document.getElementById('new-name').value = '';
+                document.getElementById('new-price').value = '';
+                clearSelectedImage();
+            }
+
+            db.ref('menus').set(updatedMenus);
+        }
+
+        function editMenu(id) {
+            const m = menus.find(item => item.id === id);
+            if (!m) return;
+
+            document.getElementById('edit-menu-id').value = m.id;
+            document.getElementById('new-name').value = m.name;
+            if (m.category && categories.includes(m.category)) {
+                document.getElementById('new-category').value = m.category;
+            }
+            document.getElementById('new-price').value = m.price;
+            currentUploadedImage = m.image || "";
+            showPreviewImage(currentUploadedImage);
+
+            document.getElementById('form-menu-title').innerText = 'แก้ไขข้อมูลสินค้า';
+            const btnSave = document.getElementById('btn-save-menu');
+            btnSave.innerText = 'บันทึก';
+            btnSave.className = 'w-full bg-amber-500 text-slate-900 py-2.5 rounded-xl font-bold hover:bg-amber-600 text-sm transition shadow-sm';
+            document.getElementById('btn-cancel-edit').classList.remove('hidden');
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function cancelEditMenu() {
+            document.getElementById('edit-menu-id').value = '';
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-price').value = '';
+            clearSelectedImage();
+
+            document.getElementById('form-menu-title').innerText = 'เพิ่มเมนูสินค้าใหม่';
+            const btnSave = document.getElementById('btn-save-menu');
+            btnSave.innerText = '+ เพิ่มเมนู';
+            btnSave.className = 'w-full bg-emerald-600 text-white py-2.5 rounded-xl font-bold hover:bg-emerald-700 text-sm transition shadow-sm';
+            document.getElementById('btn-cancel-edit').classList.add('hidden');
+        }
+
+        function toggleMenu(id) {
+            const updated = menus.map(m => m.id === id ? { ...m, available: !m.available } : m);
+            db.ref('menus').set(updated);
+        }
+
+        function deleteMenu(id) {
+            if (confirm('ยืนยันการลบสินค้านี้?')) {
+                const updated = menus.filter(item => item.id !== id);
+                if (document.getElementById('edit-menu-id').value == id) cancelEditMenu();
+                db.ref('menus').set(updated);
+            }
+        }
+
+        function renderAdminMenu() {
+            const list = document.getElementById('admin-menu-list');
+            document.getElementById('menu-count').innerText = menus.length;
+            
+            if (menus.length === 0) {
+                list.innerHTML = `<p class="text-gray-400 col-span-3 text-center py-6 text-sm">ยังไม่มีสินค้าในระบบ เพิ่มเมนูด้านบนได้เลยครับ</p>`;
+                return;
+            }
+
+            list.innerHTML = menus.map(m => {
+                const imgSrc = m.image || placeholderImg;
+                return `
+                <div class="p-3 border rounded-xl flex justify-between items-center bg-slate-50 hover:bg-white transition gap-2">
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <img src="${imgSrc}" alt="${m.name}" class="w-12 h-12 rounded-xl object-cover shrink-0 bg-amber-100 border">
+                        <div class="truncate">
+                            <span class="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold">${m.category || 'ทั่วไป'}</span>
+                            <p class="font-bold text-slate-800 text-sm truncate mt-0.5" title="${m.name}">${m.name}</p>
+                            <p class="text-xs text-slate-500">${m.price} บ. • ${m.available ? '<span class="text-emerald-600 font-bold">พร้อมขาย</span>' : '<span class="text-red-500 font-bold">หมด</span>'}</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-1 shrink-0">
+                        <button onclick="editMenu(${m.id})" class="px-2 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold hover:bg-blue-200">แก้</button>
+                        <button onclick="toggleMenu(${m.id})" class="px-2 py-1.5 rounded-lg text-xs font-semibold ${m.available ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}">
+                            ${m.available ? 'หมด' : 'เปิด'}
+                        </button>
+                        <button onclick="deleteMenu(${m.id})" class="px-2 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-200">ลบ</button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        function updateOrderStatus(id, status) {
+            db.ref('orders/' + id + '/status').set(status);
+        }
+
+        function renderOrders() {
+            const grid = document.getElementById('orders-grid');
+            const selectedDate = document.getElementById('order-date-filter').value;
+            
+            const filteredOrders = selectedDate 
+                ? orders.filter(o => o.date === selectedDate)
+                : orders;
+
+            document.getElementById('daily-order-count').innerText = `${filteredOrders.length} ออเดอร์`;
+
+            if (filteredOrders.length === 0) {
+                grid.innerHTML = `<p class="text-gray-400 col-span-3 text-center py-12">📭 ไม่มีออเดอร์ในวันที่เลือก (${selectedDate || 'ทั้งหมด'})</p>`;
+                return;
+            }
+
+            grid.innerHTML = filteredOrders.map(o => {
+                const isDelivery = o.orderType === 'delivery';
+                const typeBadge = isDelivery 
+                    ? `<span class="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">ขับรถส่ง</span>`
+                    : `<span class="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">รับหน้าร้าน</span>`;
+
+                const isBanned = o.customerIP && bannedIPs.some(b => b.ip === o.customerIP);
+                const itemsList = toArray(o.items);
+
+                let btnHTML = '';
+                let borderColor = 'border-yellow-400';
+
+                if (o.status === 'pending') {
+                    btnHTML = `<button onclick="updateOrderStatus('${o.id}', 'cooking')" class="w-full mt-3 bg-amber-500 text-slate-900 font-bold py-2.5 rounded-xl text-sm hover:bg-amber-600 active:scale-95 transition">รับออเดอร์ / เริ่มทำ</button>`;
+                } else if (o.status === 'cooking') {
+                    borderColor = 'border-blue-500';
+                    btnHTML = `<button onclick="updateOrderStatus('${o.id}', 'done')" class="w-full mt-3 bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-emerald-700 active:scale-95 transition">ทำเสร็จ / ส่งมอบแล้ว</button>`;
+                } else {
+                    borderColor = 'border-emerald-500 opacity-75';
+                    btnHTML = `<div class="mt-3 text-center text-xs font-bold text-emerald-600 bg-emerald-50 py-2 rounded-xl">ออเดอร์เสร็จสมบูรณ์</div>`;
+                }
+
+                return `
+                    <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border-t-4 ${borderColor} flex flex-col justify-between">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <span class="font-bold text-base sm:text-lg text-slate-800">${o.id}</span>
+                                    <p class="text-sm font-semibold text-amber-700">${o.customerName}</p>
+                                    <div class="flex items-center gap-1.5 mt-0.5">
+                                        <span class="text-[11px] font-mono text-gray-400">IP: ${o.customerIP || '-'}</span>
+                                        ${o.customerIP ? (
+                                            isBanned 
+                                            ? `<span class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold">แบนแล้ว</span>`
+                                            : `<button onclick="banCustomerIP('${o.customerIP}', '${o.customerName.replace(/'/g, "'")}')" class="text-[10px] bg-red-100 text-red-600 hover:bg-red-200 px-1.5 py-0.5 rounded font-semibold">แบน IP</button>`
+                                        ) : ''}
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    ${typeBadge}
+                                    <p class="text-xs text-gray-400 mt-1">${o.date} ${o.time}</p>
+                                </div>
+                            </div>
+                            ${isDelivery ? `<div class="bg-purple-50 text-purple-900 text-xs p-2.5 rounded-xl mb-2 font-medium">ส่งที่: ${o.address}</div>` : ''}
+                            
+                            ${o.slipImage ? `
+                                <div class="bg-emerald-50 border border-emerald-200 p-2 rounded-xl mb-2 flex justify-between items-center">
+                                    <span class="text-xs font-bold text-emerald-700">✅ แนบสลิปโอนแล้ว</span>
+                                    <button onclick="openSlipModal('${o.id}')" class="bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold px-2.5 py-1 rounded-lg shadow-xs">
+                                        🔍 ดูรูปสลิป
+                                    </button>
+                                </div>
+                            ` : `<div class="text-xs text-gray-500 mb-2">💵 ชำระเงินหน้าร้าน</div>`}
+
+                            <div class="border-t border-b py-2 my-2 space-y-2.5 text-sm">
+                                ${itemsList.map(i => {
+                                    const tops = toArray(i.toppings);
+                                    return `
+                                    <div>
+                                        <div class="flex justify-between">
+                                            <span class="font-bold text-slate-800">• ${i.name} x${i.qty}</span>
+                                            <span class="font-semibold">${i.price * i.qty} บ.</span>
+                                        </div>
+                                        ${tops.length > 0 ? `
+                                            <div class="flex flex-wrap gap-1 mt-1">
+                                                ${tops.map(t => `<span class="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">+ ${t.name} (+${t.price}บ.)</span>`).join('')}
+                                            </div>
+                                        ` : ''}
+                                        ${i.note ? `<p class="text-xs bg-amber-100 text-amber-900 font-bold px-2 py-1 rounded-md mt-1">หมายเหตุ: ${i.note}</p>` : ''}
+                                    </div>
+                                `}).join('')}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center font-bold text-slate-800">
+                                <span>ยอดสุทธิ:</span>
+                                <span class="text-lg text-emerald-600">${o.total} บาท</span>
+                            </div>
+                            ${btnHTML}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderAccounting() {
+            const todayStr = getTodayString();
+            const monthStr = todayStr.substring(0, 7);
+            const yearStr = todayStr.substring(0, 4);
+
+            let sumToday = 0, sumMonth = 0, sumYear = 0, countDone = 0;
+            const tbody = document.getElementById('acc-table');
+
+            if (orders.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-gray-400">ยังไม่มีข้อมูลบิล</td></tr>`;
+            } else {
+                tbody.innerHTML = orders.map(o => {
+                    if (o.status === 'done') {
+                        countDone++;
+                        if (o.date === todayStr) sumToday += o.total;
+                        if (o.date && o.date.startsWith(monthStr)) sumMonth += o.total;
+                        if (o.date && o.date.startsWith(yearStr)) sumYear += o.total;
+                    }
+                    const statusBadge = o.status === 'done' 
+                        ? '<span class="text-emerald-600 font-bold">สำเร็จ</span>' 
+                        : '<span class="text-amber-600">กำลังดำเนินการ</span>';
+
+                    const payBadge = o.slipImage 
+                        ? `<button onclick="openSlipModal('${o.id}')" class="text-blue-600 underline font-semibold text-xs">โอน (ดูสลิป)</button>`
+                        : `<span class="text-gray-500 text-xs">หน้าร้าน</span>`;
+
+                    const itemsList = toArray(o.items);
+
+                    return `
+                        <tr class="border-b">
+                            <td class="p-3 font-bold">${o.id}</td>
+                            <td class="p-3 text-xs text-gray-500">${o.date} ${o.time}</td>
+                            <td class="p-3">${o.customerName} (${o.orderType === 'delivery' ? 'ส่ง' : 'หน้าร้าน'})</td>
+                            <td class="p-3 text-xs">${itemsList.map(i => {
+                                const tops = toArray(i.toppings);
+                                const topTxt = tops.length > 0 ? ` (+${tops.map(t => t.name).join(', ')})` : '';
+                                return `${i.name}${topTxt} x${i.qty}${i.note ? ` [${i.note}]` : ''}`;
+                            }).join(', ')}</td>
+                            <td class="p-3">${payBadge}</td>
+                            <td class="p-3 text-xs">${statusBadge}</td>
+                            <td class="p-3 text-right font-bold">${o.total} บ.</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('rev-today').innerText = `${sumToday.toLocaleString()} บ.`;
+            document.getElementById('rev-month').innerText = `${sumMonth.toLocaleString()} บ.`;
+            document.getElementById('rev-year').innerText = `${sumYear.toLocaleString()} บ.`;
+            document.getElementById('rev-count').innerText = `${countDone} บิล`;
+        }
+
+        function clearOrders() {
+            if (confirm('ต้องการล้างประวัติออเดอร์ทั้งหมดออกจากระบบออนไลน์ใช่หรือไม่?')) {
+                db.ref('orders').remove();
+                knownOrderIds.clear();
+            }
+        }
+    </script>
+</body>
+</html>
